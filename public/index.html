@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Easy Template Editor</title>
+    <style>
+      body {
+        font-family: Arial;
+        margin: 40px;
+      }
+      textarea,
+      input,
+      select {
+        width: 100%;
+        padding: 10px;
+        margin-bottom: 15px;
+      }
+      button {
+        padding: 10px 20px;
+        margin: 10px 0;
+      }
+      #templatePreview {
+        border: 1px solid #ccc;
+        padding: 10px;
+        min-height: 150px;
+        background: #f9f9f9;
+      }
+      .field-pair {
+        display: flex;
+        gap: 10px;
+      }
+      .field-pair input {
+        flex: 1;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Create Your Custom Template</h1>
+
+    <label>Template Name:</label>
+    <input id="templateName" placeholder="e.g. welcome_letter" />
+
+    <h3>Step 1: Add Fields (Placeholders)</h3>
+    <div class="field-pair">
+      <input id="placeholderLabel" placeholder="Field label (e.g. Name)" />
+      <input id="placeholderKey" placeholder="Key (e.g. name)" />
+      <button onclick="addPlaceholder()">➕ Add</button>
+    </div>
+
+    <div id="placeholdersList"></div>
+
+    <h3>Step 2: Write Template</h3>
+    <textarea
+      id="templateEditor"
+      rows="10"
+      placeholder="Write your message and click placeholders to insert them..."
+    ></textarea>
+
+    <div>
+      <strong>Click placeholder to insert:</strong>
+      <span id="clickablePlaceholders"></span>
+    </div>
+
+    <button onclick="saveTemplate()">💾 Save Template</button>
+
+    <hr />
+
+    <h2>Fill & Generate PDF</h2>
+    <input id="loadTemplateInput" placeholder="Enter saved template name" />
+    <button onclick="loadTemplate()">Load Template</button>
+
+    <form id="dataForm"></form>
+    <button onclick="generatePDF()">📄 Generate PDF</button>
+
+    <script>
+      const placeholderList = [];
+      const placeholderDisplay = document.getElementById("placeholdersList");
+      const templateEditor = document.getElementById("templateEditor");
+      const placeholderBtns = document.getElementById("clickablePlaceholders");
+      const dataForm = document.getElementById("dataForm");
+
+      function addPlaceholder() {
+        const label = document.getElementById("placeholderLabel").value.trim();
+        const key = document.getElementById("placeholderKey").value.trim();
+
+        if (!label || !key) return alert("Please enter both label and key.");
+
+        placeholderList.push({ label, key });
+        updatePlaceholderUI();
+        document.getElementById("placeholderLabel").value = "";
+        document.getElementById("placeholderKey").value = "";
+      }
+
+      function updatePlaceholderUI() {
+        placeholderDisplay.innerHTML = placeholderList
+          .map(
+            (p) => `<div>🧩 <strong>${p.label}</strong> → {{${p.key}}}</div>`
+          )
+          .join("");
+
+        placeholderBtns.innerHTML = placeholderList
+          .map(
+            (p) =>
+              `<button type="button" onclick="insertPlaceholder('{{${p.key}}}')">${p.label}</button>`
+          )
+          .join(" ");
+      }
+
+      function insertPlaceholder(tag) {
+        const textarea = templateEditor;
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const text = textarea.value;
+        textarea.value = text.substring(0, start) + tag + text.substring(end);
+        textarea.focus();
+        textarea.selectionEnd = start + tag.length;
+      }
+
+      function saveTemplate() {
+        const name = document.getElementById("templateName").value.trim();
+        const content = templateEditor.value.trim();
+        if (!name || !content)
+          return alert("Please fill out the template name and content.");
+
+        fetch("/save-template", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            templateName: name,
+            templateContent: content,
+          }),
+        })
+          .then((res) => res.json())
+          .then((data) => alert(data.message))
+          .catch(() => alert("Failed to save template."));
+      }
+
+      function loadTemplate() {
+        const name = document.getElementById("loadTemplateInput").value.trim();
+        if (!name) return alert("Enter a template name.");
+
+        fetch(`/templates/${name}.hbs`)
+          .then((res) => res.text())
+          .then((templateContent) => {
+            const keys = [...templateContent.matchAll(/{{\s*(\w+)\s*}}/g)].map(
+              (m) => m[1]
+            );
+            dataForm.innerHTML = keys
+              .map((k) => `<label>${k}</label><input name="${k}" required />`)
+              .join("");
+          })
+          .catch(() => alert("Template not found."));
+      }
+
+      function generatePDF() {
+        const name = document.getElementById("loadTemplateInput").value.trim();
+        const formData = new FormData(dataForm);
+        const data = Object.fromEntries(formData.entries());
+
+        fetch("/generate-pdf", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ templateName: name, data }),
+        })
+          .then((res) => res.blob())
+          .then((blob) => {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `${name}.pdf`;
+            a.click();
+            URL.revokeObjectURL(url);
+          })
+          .catch(() => alert("Error generating PDF."));
+      }
+    </script>
+  </body>
+</html>
