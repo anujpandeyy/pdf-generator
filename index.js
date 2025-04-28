@@ -26,7 +26,6 @@ app.post("/save-template", async (req, res) => {
 app.post("/generate-pdf", async (req, res) => {
   const { templateName, data } = req.body;
   const templatePath = path.join(__dirname, "templates", `${templateName}.hbs`);
-
   try {
     const templateContent = await fs.readFile(templatePath, "utf-8");
     const template = handlebars.compile(templateContent);
@@ -46,5 +45,5 @@ app.post("/generate-pdf", async (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(`✅ Server running at http://localhost:${port}`);
+  console.log(`✅ Server running at ${port}`);
 });
